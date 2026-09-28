@@ -21,7 +21,11 @@ import org.springframework.test.context.TestPropertySource;
       "spring.flyway.enabled=false",
       "spring.rabbitmq.listener.simple.auto-startup=false",
       "spring.kafka.bootstrap-servers=localhost:9092",
-      "app.kafka.topics.order-confirmed=order.confirmed"
+      "app.kafka.topics.order-confirmed=order.confirmed",
+      "outbox.defaults.persistence.schema.mode=none",
+      "outbox.defaults.publisher.enabled=false",
+      "outbox.defaults.recovery.enabled=false",
+      "outbox.channels.order.persistence.table-name=outbox_records"
     })
 class OrderServiceApplicationTests {
 

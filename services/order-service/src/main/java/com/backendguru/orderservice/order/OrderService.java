@@ -21,7 +21,6 @@ import com.backendguru.orderservice.observability.OrderMetrics;
 import com.backendguru.orderservice.order.dto.OrderResponse;
 import com.backendguru.orderservice.order.dto.PlaceOrderRequest;
 import com.backendguru.orderservice.outbox.OutboxAppender;
-import com.backendguru.orderservice.outbox.OutboxEventRepository;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,7 +28,9 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Saga orchestrator. Each step is its own short transaction; compensations run on failure.
@@ -48,8 +49,8 @@ public class OrderService {
   private final InventoryClient inventoryClient;
   private final PaymentClient paymentClient;
   private final OrderEventPublisher eventPublisher;
-  private final OutboxEventRepository outboxRepository;
   private final OutboxAppender outboxAppender;
+  private final PlatformTransactionManager transactionManager;
   private final OrderMetrics metrics;
   private final CouponService couponService;
   private final SubOrderSplitter subOrderSplitter;
@@ -155,14 +156,24 @@ public class OrderService {
       //    onto each order_items row in the same flush.
       subOrderSplitter.split(order);
 
-      // 6b. Mark CONFIRMED + record coupon redemption + write outbox row in the SAME transaction
-      order.setStatus(OrderStatus.CONFIRMED);
-      order = orderRepository.save(order);
-      if (order.getCouponCode() != null) {
-        couponService.recordRedemption(
-            order.getCouponCode(), userId, order.getId(), order.getDiscountAmount());
-      }
-      outboxRepository.save(outboxAppender.buildOrderConfirmed(order));
+      // 6b. CONFIRMED + coupon + starter enqueue in one TX (replaces OutboxEventRepository.save)
+      Order toConfirm = order;
+      order =
+          new TransactionTemplate(transactionManager)
+              .execute(
+                  status -> {
+                    toConfirm.setStatus(OrderStatus.CONFIRMED);
+                    Order confirmed = orderRepository.save(toConfirm);
+                    if (confirmed.getCouponCode() != null) {
+                      couponService.recordRedemption(
+                          confirmed.getCouponCode(),
+                          userId,
+                          confirmed.getId(),
+                          confirmed.getDiscountAmount());
+                    }
+                    outboxAppender.appendOrderConfirmed(confirmed);
+                    return confirmed;
+                  });
       metrics.incrementPlaced(order.getCurrency());
       log.info("Order {} CONFIRMED + outbox event queued", order.getId());
 

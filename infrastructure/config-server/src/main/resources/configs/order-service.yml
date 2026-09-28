@@ -42,8 +42,23 @@ app:
   kafka:
     topics:
       order-confirmed: order.confirmed
-  outbox:
-    poll-interval-ms: 1000
+
+# Outbox channel is not RabbitMQ. Channel "order" is an isolated table for this
+# service's order-event stream (not V2 aggregate_type). table-name is outbox_records
+# because Flyway V2 already created outbox_events with a different schema.
+# schema.mode none: DDL lives in Flyway V9. Recovery 10s is the starter default —
+# longer than the old 1s OutboxRelay poll.
+outbox:
+  defaults:
+    persistence:
+      schema:
+        mode: none
+    recovery:
+      interval: 10s
+  channels:
+    order:
+      persistence:
+        table-name: outbox_records
 
 resilience4j:
   circuitbreaker:

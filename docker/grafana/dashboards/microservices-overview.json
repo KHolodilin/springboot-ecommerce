@@ -74,8 +74,8 @@
       "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "Prometheus"},
       "targets": [
-        {"expr": "sum(rate(outbox_published_total[1m])) by (eventType)", "legendFormat": "published {{eventType}}"},
-        {"expr": "sum(rate(outbox_failed_total[1m])) by (eventType)", "legendFormat": "failed {{eventType}}"}
+        {"expr": "sum(rate(outbox_publish_total{result=\"success\"}[1m])) by (eventType)", "legendFormat": "published {{eventType}}"},
+        {"expr": "sum(rate(outbox_publish_total{result=\"failure\"}[1m])) by (eventType)", "legendFormat": "failed {{eventType}}"}
       ]
     },
     {

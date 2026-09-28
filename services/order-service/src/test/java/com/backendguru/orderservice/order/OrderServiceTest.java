@@ -31,9 +31,6 @@ import com.backendguru.orderservice.marketplace.SubOrderSplitter;
 import com.backendguru.orderservice.observability.OrderMetrics;
 import com.backendguru.orderservice.order.dto.PlaceOrderRequest;
 import com.backendguru.orderservice.outbox.OutboxAppender;
-import com.backendguru.orderservice.outbox.OutboxEvent;
-import com.backendguru.orderservice.outbox.OutboxEventRepository;
-import com.backendguru.orderservice.outbox.OutboxStatus;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.math.BigDecimal;
 import java.util.List;
@@ -45,6 +42,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
 
 @ExtendWith(MockitoExtension.class)
 class OrderServiceTest {
@@ -54,8 +53,9 @@ class OrderServiceTest {
   @Mock InventoryClient inventoryClient;
   @Mock PaymentClient paymentClient;
   @Mock OrderEventPublisher eventPublisher;
-  @Mock OutboxEventRepository outboxRepository;
   @Mock OutboxAppender outboxAppender;
+  @Mock PlatformTransactionManager transactionManager;
+  @Mock TransactionStatus transactionStatus;
   @Mock SubOrderSplitter subOrderSplitter;
   @Mock SubOrderRepository subOrderRepository;
 
@@ -105,17 +105,8 @@ class OrderServiceTest {
               return o;
             });
     org.mockito.Mockito.lenient()
-        .when(outboxAppender.buildOrderConfirmed(any(Order.class)))
-        .thenAnswer(
-            inv ->
-                OutboxEvent.builder()
-                    .eventId("evt-test")
-                    .aggregateType("ORDER")
-                    .aggregateId("100")
-                    .eventType("ORDER_CONFIRMED")
-                    .payload("{}")
-                    .status(OutboxStatus.PENDING)
-                    .build());
+        .when(transactionManager.getTransaction(any()))
+        .thenReturn(transactionStatus);
   }
 
   // ---------- happy path ----------
@@ -150,8 +141,7 @@ class OrderServiceTest {
     verify(paymentClient).charge(any());
     verify(cartClient).clearCart(String.valueOf(USER_ID));
     verify(eventPublisher).publishOrderConfirmed(any(Order.class));
-    verify(outboxAppender).buildOrderConfirmed(any(Order.class));
-    verify(outboxRepository).save(any(OutboxEvent.class));
+    verify(outboxAppender).appendOrderConfirmed(any(Order.class));
     verify(inventoryClient, never()).release(anyLong());
     verify(paymentClient, never()).refund(anyLong());
   }
