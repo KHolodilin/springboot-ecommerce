@@ -43,3 +43,6 @@ out/
 ### Logs ###
 logs/
 *.log
+
+### Local smoke helpers ###
+tmp-smoke-*.json
